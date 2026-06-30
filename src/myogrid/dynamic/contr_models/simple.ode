@@ -1,0 +1,88 @@
+# Simplified contraction model based on some components from Nieder, Hunter, Smith, 2006. 
+
+parameters("Filament overlap",
+           beta_0 = 2.5,
+           SL_rest = 1.85,
+	   SLset = ScalarParam(1.9, unit="um"),	
+           visc = 3)
+
+parameters("Passive force",
+           k_passive = ScalarParam(100.0, unit = "N*mm**-2"),
+           applied_stretch = ScalarParam(5.0, unit = "N*mm**-2"))
+
+parameters("Equation for simulated calcium transient",
+           tau1 = ScalarParam(20, unit="ms"),
+           tau2 = ScalarParam(110, unit="ms"),
+           start_time = ScalarParam(5, unit="ms"),
+           Ca_amplitude = ScalarParam(1.45, unit="uM"),
+           Ca_diastolic = ScalarParam(0.09, unit="uM"))
+
+states("Tropomyosin",
+       z = 0.014417937837)
+
+parameters("Tropomyosin",
+           alpha_0 = ScalarParam(8e-3, unit="ms**-1"),
+           alpha_r1 = ScalarParam(2e-3, unit="ms**-1"),
+           alpha_r2 = ScalarParam(1.75e-3, unit="ms**-1"),
+           n_Rel = 3,
+           K_z = 0.15,
+           n_Hill = 3,
+           Ca_50ref = ScalarParam(1.05e-3, unit="mmole*l**-1"),
+           z_p = 0.85,
+           beta_1 = -2)
+
+parameters("Length independent tension",
+           T_ref = ScalarParam(56.2, unit="N*mm**-2"))
+
+parameters("Troponin",
+           Ca_TRPN_Max = ScalarParam(70e-3, unit="mmole*l**-1"),
+           k_on = ScalarParam(100, unit="mmole**-1*l*ms**-1"),
+           k_Ref_off = ScalarParam(0.2, unit="ms**-1"),
+           gamma_trpn = 2)
+
+states("Intracellular ion concentrations",
+       TRPN = ScalarParam(0.067593139865, unit="mmole*l**-1"))
+
+
+expressions("Equation for simulated calcium transient")
+beta = (tau1/tau2)**(-1/(tau1/tau2 - 1)) - (tau1/tau2)**(-1/(1 - tau2/tau1))
+Cai = 0.001*Conditional(Gt(time, start_time), (Ca_amplitude - Ca_diastolic)/beta*(exp(-(time - start_time)/tau1) - exp(-(time - start_time)/tau2)) + Ca_diastolic, Ca_diastolic) # mM
+
+Ca_b = Ca_TRPN_Max - TRPN # mmole*l**-1
+
+
+states("Isometric tension",
+       SL = 1.892)
+
+expressions("Filament overlap")
+overlap = 1 + beta_0*(SL - SL_rest)
+
+expressions("Passive force")
+passive = k_passive*(SL-SLset)
+
+expressions("Tropomyosin")
+K_2 = alpha_r2*z_p**n_Rel/(z_p**n_Rel + K_z**n_Rel)*(1 - n_Rel*K_z**n_Rel/(z_p**n_Rel + K_z**n_Rel)) # ms**-1
+K_1 = alpha_r2*z_p**(n_Rel - 1)*n_Rel*K_z**n_Rel/(z_p**n_Rel + K_z**n_Rel)**2 # ms**-1
+Ca_50 = Ca_50ref*(1 + beta_1*(SL - SL_rest)) # mmole*l**-1
+Ca_TRPN_50 = Ca_50*Ca_TRPN_Max/(Ca_50 + k_Ref_off/k_on*(1 - (1 + beta_0*(SL-SL_rest))*0.5/gamma_trpn)) # mmole*l**-1
+alpha_Tm = alpha_0*(Ca_b/Ca_TRPN_50)**n_Hill # ms**-1
+beta_Tm = alpha_r1 + alpha_r2*z**(n_Rel - 1)/(z**n_Rel + K_z**n_Rel) # ms**-1
+dz_dt = alpha_Tm*(1 - z) - beta_Tm*z
+z_max = (alpha_0/(Ca_TRPN_50/Ca_TRPN_Max)**n_Hill - K_2)/(alpha_r1 + K_1 + alpha_0/(Ca_TRPN_50/Ca_TRPN_Max)**n_Hill)
+
+expressions("Length independent tension")
+T_Base = T_ref*z/z_max # N*mm**-2
+
+expressions("Isometric tension")
+active = T_Base*overlap # N*mm**-2
+total_force = active+passive #-applied_stretch
+dSL_dt = (-total_force+applied_stretch)/visc
+
+
+expressions("Troponin")
+k_off = k_Ref_off
+J_TRPN = (Ca_TRPN_Max - TRPN)*k_off - Cai*TRPN*k_on # mmole*l**-1*ms**-1
+
+expressions("Intracellular ion concentrations")
+dTRPN_dt = J_TRPN
+

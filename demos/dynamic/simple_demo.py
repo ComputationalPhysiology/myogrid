@@ -1,15 +1,16 @@
 import numpy as np
 import matplotlib.pyplot as plt
-#from scipy.integrate import solve_ivp
 from myogrid.overlap import OverlapRice
 from myogrid.dynamic import (
     SarcArray2D,
-    contr_model,
+    contr_model
+)
+from myogrid.dynamic.plot_functions import (
     plot_sarc_array, 
     plot_results, 
-    get_results,
-    CaTransientFromFile
+    get_results
 )
+from myogrid.dynamic.ca_transients import CaTransientFromFile
 
 
 N_SERIES = 5

@@ -9,11 +9,20 @@ contraction in ttnda mutant cells:
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+from myogrid.overlap import Overlap, OverlapRice
+from myogrid.steady import SarcArray
+from myogrid.steady.plot_functions import (
+    plot_sarcomere_groups, 
+    plot_active_work, 
+    plot_active_force
+)
+
+
 from typing import Dict, List, Tuple, Any, Optional
 
-from steadystate_array import SarcArray
-from overlap import Overlap, OverlapRice
-from plot_functions import plot_sarcomere_groups, plot_active_work, plot_active_force
+#from steadystate_array import SarcArray
+#from overlap import Overlap, OverlapRice
+#from plot_functions import plot_sarcomere_groups, plot_active_work, plot_active_force
 
 # Type alias for cleaner type hinting
 ResultDict = Dict[str, List[Any]]

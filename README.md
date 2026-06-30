@@ -2,9 +2,9 @@
 
 A multiscale mathematical modeling framework for simulating sarcomere arrays in cardiomyocytes. 
 
-MyoGrid bridges the gap between biological structure and macroscopic force production. It allows researchers to model 2D arrays of connected sarcomeres (myofibrils in parallel, sarcomeres in series) using either dynamic Ordinary Differential Equations (ODEs) or steady-state algebraic solvers. 
+MyoGrid represents a contracting myocyte as a 2D array of connected sarcomeres (myofibrils in parallel, sarcomeres in series) using either dynamic Ordinary Differential Equations (ODEs) or steady-state algebraic solvers. 
 
-A core feature of MyoGrid is the ability to simulate **heterogeneous populations** (e.g., mixing Wild-Type and Mutant sarcomeres within the same tissue grid) to analyze how localized structural deficits—such as reduced thick filament length or altered passive stiffness—affect global contractile performance.
+MyoGrid supports homogeneous and heterogeneous sarcomere arrays, for instance using different active force scaling or different calcium transients. 
 
 ---
 

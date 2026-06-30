@@ -4,19 +4,23 @@ Simulate a mixed array containing 80% Wild-Type (Control) and
 overlap function to simulate reduced thick filament length.
 """
 
+
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import Dict, List, Any, Optional
-
-from steadystate_array import SarcArray
-from overlap import Overlap
-from plot_functions import (
+from myogrid.overlap import Overlap #, OverlapRice
+from myogrid.steady import SarcArray
+from myogrid.steady.plot_functions import (
     plot_sarcomere_groups, 
     plot_active_work, 
     plot_active_force,
     plot_mutant_distribution  
 )
+
+
+
+from typing import Dict, List, Any, Optional
+
 
 ResultDict = Dict[str, List[Any]]
 

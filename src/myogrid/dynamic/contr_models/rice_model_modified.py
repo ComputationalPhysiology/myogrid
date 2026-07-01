@@ -4,7 +4,7 @@
 from __future__ import division
 
 
-from cellmodels.overlap import Overlap, OverlapRice, OverlapDummy
+#from cellmodels.overlap import Overlap, OverlapRice, OverlapDummy
 
 
 #global variable for now
@@ -15,7 +15,7 @@ from cellmodels.overlap import Overlap, OverlapRice, OverlapDummy
 
 #modified version with steeper LDA at SL < 1.7
 #Used for figure 4 in original paper, and gives better match with experiments
-overlap_func = Overlap(SL_zero=1.6,SL_low=1.7)
+#overlap_func = Overlap(SL_zero=1.6,SL_low=1.7)
 
 #default from Rice model
 #overlap_func = Overlap()#SL_zero=1.6,SL_low=1.7)

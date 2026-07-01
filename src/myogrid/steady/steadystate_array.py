@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import newton_krylov, NoConvergence
 from typing import Callable, Dict, Optional, Tuple, Any
 
-class SarcArray:
+class SteadySarcArray2D:
     def __init__(
         self,
         overlap: Callable[[np.ndarray], np.ndarray],
@@ -48,6 +48,7 @@ class SarcArray:
         self.init_non_c: np.ndarray = stretch + constant
         self.init_stretch: np.ndarray = stretch
         self.init_constant: np.ndarray = constant
+        
     # --- Physics & Force Calculation Methods ---
 
     def passive_force_titin(self, SL: np.ndarray, PExp_t: float = 10.0) -> np.ndarray:
@@ -108,7 +109,7 @@ class SarcArray:
     def _compute_force_balance(self, phi: float, SL0_guess: np.ndarray, preload: float) -> np.ndarray:
         """Internal solver for equilibrium force balance."""
         def force_balance(SL: np.ndarray) -> np.ndarray:
-            return self.calculate_nodal_forces(SL, phi, preload)
+             return self.calculate_nodal_forces(SL, phi, preload)
 
         try:
             solution = newton_krylov(force_balance, SL0_guess, f_tol=1e-4, maxiter=500)

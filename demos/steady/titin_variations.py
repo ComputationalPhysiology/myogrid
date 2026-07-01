@@ -6,23 +6,18 @@ contraction in ttnda mutant cells:
 - Reduced thick filament length
 """
 
-import os
 import numpy as np
 import matplotlib.pyplot as plt
+from pathlib import Path
+from typing import Dict, List, Tuple, Any, Optional
+
 from myogrid.overlap import Overlap, OverlapRice
-from myogrid.steady import SarcArray
+from myogrid.steady import SteadySarcArray2D
 from myogrid.steady.plot_functions import (
     plot_sarcomere_groups, 
     plot_active_work, 
     plot_active_force
 )
-
-
-from typing import Dict, List, Tuple, Any, Optional
-
-#from steadystate_array import SarcArray
-#from overlap import Overlap, OverlapRice
-#from plot_functions import plot_sarcomere_groups, plot_active_work, plot_active_force
 
 # Type alias for cleaner type hinting
 ResultDict = Dict[str, List[Any]]
@@ -32,11 +27,11 @@ def create_sarc_array(
     params: Dict[str, float], 
     overlap_func: Overlap, 
     sl_params: Tuple[float, float]
-) -> SarcArray:
-    """Helper function to instantiate a SarcArray with given parameters."""
-    return SarcArray(
-        overlap_func, 
-        params, 
+) -> SteadySarcArray2D:
+    """Helper function to instantiate a SteadySarcArray2D with given parameters."""
+    return SteadySarcArray2D(
+        overlap=overlap_func, 
+        params=params, 
         no_myofibrils=30, 
         no_serial_sarcs=50, 
         mean=sl_params[0], 
@@ -62,7 +57,7 @@ def plot_overlap_comparison(overlap_wt: Overlap, overlap_ttn: Overlap, filename:
 
 
 def run_simulation_sweep(
-    sarc_array: SarcArray, 
+    sarc_array: SteadySarcArray2D, 
     preloads: List[float], 
     activation: float,
     mutant_mask: Optional[np.ndarray] = None
@@ -129,9 +124,8 @@ def run_simulation_sweep(
 
 
 def main() -> None:
-    figure_dir = "figure8_panels"
-    if not os.path.isdir(figure_dir):
-        os.makedirs(figure_dir)
+    figure_dir = Path("titin_variation_figs")
+    figure_dir.mkdir(parents=True, exist_ok=True)
 
     # Active default parameters:
     params_wt = {"k_se": 1.0, "PCon_t": 0.002, "k_im": 1.0, "T_ref": 15.0}
@@ -141,7 +135,7 @@ def main() -> None:
     overlap_wt = Overlap(SL_zero=1.6, SL_low=1.7)
     overlap_ttn = Overlap(SL_zero=1.6, SL_low=1.7, scale=0.7857)
 
-    plot_overlap_comparison(overlap_wt, overlap_ttn, filename="overlap_ttn.png")
+    plot_overlap_comparison(overlap_wt, overlap_ttn, filename=str(figure_dir / "overlap_ttn.png"))
 
     wt_mean, wt_sd = 1.952, 0.15
     ttn_mean, ttn_sd = 1.952, 0.15
@@ -155,12 +149,6 @@ def main() -> None:
     # Example: Create an empty mask (all False = Control)
     all_control_mask = np.zeros((n_myofibrils, n_serial_sarcs), dtype=bool)
     all_mutant_mask = np.ones((n_myofibrils, n_serial_sarcs), dtype=bool)
-    #mutant_mask_20_percent = np.random.rand(n_myofibrils, n_serial_sarcs) < 0.20
-
-    # You can verify the exact percentage generated like this:
-    #actual_percentage = np.mean(mutant_mask_20_percent) * 100
-    #print(f"Generated mutant mask with {actual_percentage:.1f}% mutant sarcomeres.")
-
 
     # --- Setup and Run Simulations ---
 
@@ -185,8 +173,8 @@ def main() -> None:
 
     for key in ttn_results:
         # Force plots
-        summaryfile = f"force_{key}.txt"
-        filename = os.path.join(figure_dir, f"force_{key}.pdf")
+        summaryfile = str(figure_dir / f"force_{key}.txt")
+        filename = str(figure_dir / f"force_{key}.pdf")
         
         plt.clf()
         norm = plot_active_force(
@@ -199,8 +187,8 @@ def main() -> None:
         )
 
         # Groups plots (using the separated control array from our new dictionary keys)
-        summaryfile_ctrl = f"groups_{key}_ctrl.txt"
-        filename_ctrl = os.path.join(figure_dir, f"groups_{key}_ctrl.pdf")
+        summaryfile_ctrl = str(figure_dir / f"groups_{key}_ctrl.txt")
+        filename_ctrl = str(figure_dir / f"groups_{key}_ctrl.pdf")
         
         plt.clf()
         plot_sarcomere_groups(
@@ -221,26 +209,26 @@ def main() -> None:
 
     # Total Work Plot
     plt.clf()
-    filename = os.path.join(figure_dir, "work_combined_total.pdf")
+    filename = str(figure_dir / "work_combined_total.pdf")
     norm = plot_active_work(
         control_results["strains"], control_results["work"], filename,
-        label="Control", grouped=False, summaryfile="figure8.txt"
+        label="Control", grouped=False, summaryfile=str(figure_dir / "figure8.txt")
     )
     plot_active_work(
         ttn_results[key]["strains"], ttn_results[key]["work"], filename,
-        label=key, grouped=False, baseline=norm, summaryfile="figure8.txt"
+        label=key, grouped=False, baseline=norm, summaryfile=str(figure_dir / "figure8.txt")
     )
 
     # Grouped Work Plot
     plt.clf()
-    filename = os.path.join(figure_dir, "work_combined_grouped.pdf")
+    filename = str(figure_dir / "work_combined_grouped.pdf")
     norm = plot_active_work(
         control_results["strains"], control_results["work"], filename,
-        label="Control", grouped=True, summaryfile="figure8.txt"
+        label="Control", grouped=True, summaryfile=str(figure_dir / "figure8.txt")
     )
     plot_active_work(
         ttn_results[key]["strains"], ttn_results[key]["work"], filename,
-        label=key, grouped=True, baseline=norm, summaryfile="figure8.txt"
+        label=key, grouped=True, baseline=norm, summaryfile=str(figure_dir / "figure8.txt")
     )
 
 if __name__ == "__main__":

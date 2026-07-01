@@ -1,2 +1,2 @@
-from .steadystate_array import SarcArray
+from .steadystate_array import SteadySarcArray2D
 from . import plot_functions

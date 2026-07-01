@@ -4,12 +4,12 @@ Simulate a mixed array containing 80% Wild-Type (Control) and
 overlap function to simulate reduced thick filament length.
 """
 
-
-import os
 import numpy as np
 import matplotlib.pyplot as plt
-from myogrid.overlap import Overlap #, OverlapRice
-from myogrid.steady import SarcArray
+from pathlib import Path
+
+from myogrid.overlap import Overlap 
+from myogrid.steady import SteadySarcArray2D
 from myogrid.steady.plot_functions import (
     plot_sarcomere_groups, 
     plot_active_work, 
@@ -17,16 +17,13 @@ from myogrid.steady.plot_functions import (
     plot_mutant_distribution  
 )
 
-
-
-from typing import Dict, List, Any, Optional
-
+from typing import Dict, List, Any
 
 ResultDict = Dict[str, List[Any]]
 
 
 def run_simulation_sweep(
-    sarc_array: SarcArray, 
+    sarc_array: SteadySarcArray2D, 
     preloads: List[float], 
     activation: float,
     mutant_mask: np.ndarray
@@ -64,7 +61,7 @@ def run_simulation_sweep(
         print(f"Mutant Sarcomeres  -> Contracting: {contr_mut}, Constant: {const_mut}, Stretched: {stretch_mut}")
 
         strain = sarc_array.sarc_strain(SL0)
-        
+    
         # Save group numbers for plotting
         results["n_sarc_group_tot"].append([strain, contr_tot, const_tot, stretch_tot])
         results["n_sarc_group_ctrl"].append([strain, contr_ctrl, const_ctrl, stretch_ctrl])
@@ -79,9 +76,9 @@ def run_simulation_sweep(
 
 
 def main() -> None:
-    figure_dir = "mixed_sim_panels"
-    if not os.path.isdir(figure_dir):
-        os.makedirs(figure_dir)
+    # Use pathlib for clean directory management
+    figure_dir = Path("mixed_sim_panels")
+    figure_dir.mkdir(parents=True, exist_ok=True)
 
     # --- 1. Define Parameters ---
     params_wt = {"k_se": 1.0, "PCon_t": 0.002, "k_im": 1.0, "T_ref": 15.0}
@@ -100,9 +97,8 @@ def main() -> None:
     
     plot_mutant_distribution(
         mutant_mask, 
-        filename=os.path.join(figure_dir, "array_distribution.pdf")
+        filename=str(figure_dir / "array_distribution.pdf")
     )
-
 
     actual_pct = np.mean(mutant_mask) * 100
     print(f"========== Initializing Mixed Array ==========")
@@ -111,8 +107,8 @@ def main() -> None:
 
     # --- 3. Run Simulation ---
     # We pass the standard WT parameters to the whole array, but provide the 
-    # mutant_mask and mutant_scale so SarcArray handles the local scaling internally.
-    mixed_array = SarcArray(
+    # mutant_mask and mutant_scale so SteadySarcArray2D handles the local scaling internally.
+    mixed_array = SteadySarcArray2D(
         overlap=overlap_wt, 
         params=params_wt, 
         no_myofibrils=n_myofibrils, 
@@ -131,7 +127,7 @@ def main() -> None:
     
     # Plot Total Force
     plt.clf()
-    force_file = os.path.join(figure_dir, "mixed_force.pdf")
+    force_file = str(figure_dir / "mixed_force.pdf")
     plot_active_force(
         results["strains"], results["active"], force_file,
         label="Mixed Array", grouped=True
@@ -139,7 +135,7 @@ def main() -> None:
     
     # Plot Total Work
     plt.clf()
-    work_file = os.path.join(figure_dir, "mixed_work.pdf")
+    work_file = str(figure_dir / "mixed_work.pdf")
     plot_active_work(
         results["strains"], results["work"], work_file,
         label="Mixed Array", grouped=True
@@ -148,19 +144,19 @@ def main() -> None:
     # Plot Sub-population Proportions
     plt.clf()
     plot_sarcomere_groups(
-        results["n_sarc_group_tot"], os.path.join(figure_dir, "groups_total.pdf"),
+        results["n_sarc_group_tot"], str(figure_dir / "groups_total.pdf"),
         label="Total Array", merge_groups=True
     )
     
     plt.clf()
     plot_sarcomere_groups(
-        results["n_sarc_group_ctrl"], os.path.join(figure_dir, "groups_control.pdf"),
+        results["n_sarc_group_ctrl"], str(figure_dir / "groups_control.pdf"),
         label="Control", merge_groups=True
     )
     
     plt.clf()
     plot_sarcomere_groups(
-        results["n_sarc_group_mut"], os.path.join(figure_dir, "groups_mutant.pdf"),
+        results["n_sarc_group_mut"], str(figure_dir / "groups_mutant.pdf"),
         label="Mutant", merge_groups=True
     )
     

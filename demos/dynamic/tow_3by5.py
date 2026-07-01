@@ -22,10 +22,25 @@ def main():
     no_myofib = 3
 
     # These four lines are for plotting the sarcomere array and saving the color map:
+    # These lines are for plotting the sarcomere array and saving the color map:
     SLarr = np.array([[2.0] * no_sarc_series, [2.0] * no_sarc_series, [2.0] * no_sarc_series])
     sarcs_to_plot = [(1, 1), (1, 2), (1, 3)]
     filename = os.path.join(figure_dir, 'tow_array.pdf')
-    colors = plot_sarc_array(filename, SLarr, sarcs_to_plot, True)
+
+    # 1. Define your labels (Fibril 1, Series 2 is TOW, the rest are Shortening)
+    my_labels = {
+        (1, 2): "HF TOW",
+        "default": "HF Shortening"
+    }
+
+    # 2. Pass them into your standardized plotting function
+    ax_grid, colors = plot_sarc_array(
+        data=SLarr, 
+        plot_sarcs=sarcs_to_plot, 
+        plot_springs=True,
+        filename=filename,
+        sarc_labels=my_labels  # <-- Labels restored here!
+    )
 
     overlap_func = OverlapRice(len_thin=1.4, len_thick=1.45)
     

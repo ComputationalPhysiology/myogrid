@@ -2,236 +2,228 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.colors import ListedColormap
 import numpy as np
-from typing import Optional, Union, List, Dict
+from typing import Optional, Union, List, Dict, Tuple, Any
+from pathlib import Path
 
-def plot_sarcomere_groups(
-    n_sarc_group: Union[List, np.ndarray],
-    filename: str,
-    summaryfile: Optional[str] = None,
-    merge_groups: bool = True,
-    label: str = ''
-) -> None:
-    """
-    Panel 4H: Proportion of sarcomeres in each group as a function of stretch.
-    Tracks how the numbers in each group change with total stretch.
-    """
+
+# ==========================================
+# 1. DATA PROCESSING (The Pipeline)
+# ==========================================
+
+def process_sarcomere_groups(n_sarc_group: Union[List, np.ndarray]) -> Dict[str, np.ndarray]:
+    """Processes raw group counts into proportions and extracted arrays."""
     n_sarc_group = np.asarray(n_sarc_group)
     total_number = np.sum(n_sarc_group[0, 1:])
     
-    # --- Guard against ZeroDivisionError for empty groups ---
     if total_number == 0:
-        print(f"Skipping group plot for '{label}': 0 sarcomeres present.")
-        return
-    
-    plt.plot(n_sarc_group[:, 0], n_sarc_group[:, 1] / total_number, label=f'{label} Contracting')
-    
-    if merge_groups:
-        stretched = n_sarc_group[:, 2] + n_sarc_group[:, 3]  # constant + stretched
-        plt.plot(n_sarc_group[:, 0], stretched / total_number, label=f'{label} Stretched')
-    else:
-        plt.plot(n_sarc_group[:, 0], n_sarc_group[:, 2] / total_number, label=f'{label} Constant')
-        plt.plot(n_sarc_group[:, 0], n_sarc_group[:, 3] / total_number, label=f'{label} Stretched')
+        return {}
         
-    plt.legend()
-    yticks = np.linspace(0, 1, 6)
-    ylabels = [f'{l*100:2.0f}' for l in yticks]
-    plt.yticks(yticks, ylabels)
-    plt.ylabel('Proportion of sarcomeres (%)')
-    plt.xlabel('Total stretch (%)')
-    plt.savefig(filename)
+    return {
+        "stretch": n_sarc_group[:, 0],
+        "contracting_prop": n_sarc_group[:, 1] / total_number,
+        "constant_prop": n_sarc_group[:, 2] / total_number,
+        "stretched_prop": n_sarc_group[:, 3] / total_number,
+        "contracting_raw": n_sarc_group[:, 1],
+        "constant_raw": n_sarc_group[:, 2],
+        "stretched_raw": n_sarc_group[:, 3],
+    }
 
-    # Save figure data in a text file:
-    if summaryfile is not None:
-        with open(summaryfile, 'a') as outfile:
-            outfile.write('Panel 4H, number of sarcs\n')
-            outfile.write('Stretch values (x axis):\n')
-            outfile.write(f'{n_sarc_group[:, 0]}\n')
-            outfile.write('Number of sarcs (y axis):\n')
-            outfile.write(f'Contracting: {n_sarc_group[:, 1]}\n')
-            outfile.write(f'Constant: {n_sarc_group[:, 2]}\n')
-            outfile.write(f'Stretched: {n_sarc_group[:, 3]}\n\n\n')
-
-
-def plot_mutant_distribution(
-    mutant_mask: np.ndarray, 
-    filename: str, 
-    show: bool = False
-) -> None:
-    """
-    Visualizes the 2D sarcomere array grid, color-coding Control vs. Mutant sarcomeres.
-    """
-    plt.clf()
-    
-    # Create a discrete colormap: 0 (False/Control) -> Light Blue, 1 (True/Mutant) -> Orange
-    colors = ['#add8e6', '#ff7f0e']
-    cmap = ListedColormap(colors)
-    
-    # imshow treats True as 1 and False as 0
-    # aspect='auto' ensures the cells stretch to fit standard figure sizes
-    plt.imshow(mutant_mask, cmap=cmap, aspect='auto', origin='lower')
-    
-    plt.title('Spatial Distribution of Mutant Sarcomeres')
-    plt.ylabel('Myofibril Index (Parallel)')
-    plt.xlabel('Sarcomere Index (Serial)')
-    
-    # Create a custom legend
-    ctrl_patch = mpatches.Patch(color=colors[0], label='Control (WT)')
-    mut_patch = mpatches.Patch(color=colors[1], label='Mutant')
-    
-    # Place legend completely outside the plot box
-    plt.legend(handles=[ctrl_patch, mut_patch], bbox_to_anchor=(1.05, 1), loc='upper left')
-    
-    # tight_layout ensures the external legend isn't cut off during save
-    plt.tight_layout()
-    plt.savefig(filename, bbox_inches='tight')
-    
-    if show:
-        plt.show()
-
-
-def plot_sarcomere_length(
-    stretch: Union[List, np.ndarray],
-    stretched_sls: List[Dict[str, Union[float, np.ndarray]]],
-    filename: str,
-    merge_groups: bool = True,
-    summaryfile: Optional[str] = None,
-    label: str = ''
-) -> None:
-    """
-    Panel 4I: Sarcomere length after stretch, before contraction,
-    for each group, as a function of mean stretch.
-    """
-    # Restructure the list of dicts into a dict of arrays
-    sl0_groups = {
+def process_sarcomere_length(stretched_sls: List[Dict[str, Union[float, np.ndarray]]]) -> Dict[str, np.ndarray]:
+    """Extracts sarcomere length dictionaries into plottable arrays."""
+    return {
         key: np.array([sl0[key] for sl0 in stretched_sls]) 
         for key in stretched_sls[0]
     }
 
+def process_active_metric(data: Union[List, np.ndarray], baseline: Optional[float] = None) -> Dict[str, Any]:
+    """Processes force or work data (calculates sum and normalizes)."""
+    arr = np.array(data)
+    sum_val = np.sum(arr, axis=1)
+    
+    if baseline is None:
+        baseline = float(sum_val[0])
+        
+    return {
+        "baseline": baseline,
+        "total_norm": sum_val / baseline,
+        "contracting_norm": arr[:, 0] / baseline,
+        "constant_norm": arr[:, 1] / baseline,
+        "stretched_norm": arr[:, 2] / baseline,
+        "total_raw": sum_val,
+        "contracting_raw": arr[:, 0],
+        "constant_raw": arr[:, 1],
+        "stretched_raw": arr[:, 2]
+    }
+
+
+# ==========================================
+# 2. FILE I/O (Exporting Summaries)
+# ==========================================
+
+def export_group_summary(filepath: Union[str, Path], title: str, group_data: dict) -> None:
+    """Appends processed group data to a summary text file."""
+    if not group_data: 
+        return
+        
+    with open(filepath, 'a') as f:
+        f.write(f'{title}\n')
+        f.write('Stretch values (x axis):\n')
+        f.write(f'{group_data["stretch"]}\n')
+        f.write('Number of sarcs (y axis):\n')
+        f.write(f'Contracting: {group_data["contracting_raw"]}\n')
+        f.write(f'Constant: {group_data["constant_raw"]}\n')
+        f.write(f'Stretched: {group_data["stretched_raw"]}\n\n\n')
+
+def export_metric_summary(filepath: Union[str, Path], title: str, stretch: np.ndarray, metric_data: dict) -> None:
+    """Appends processed force or work data to a summary text file."""
+    with open(filepath, 'a') as f:
+        f.write(f'{title}\n')
+        f.write('Stretch values (x axis):\n')
+        f.write(f'{stretch}\n')
+        f.write('Normalized metric (y axis):\n')
+        f.write(f'Total: {metric_data["total_norm"]}\n')
+        f.write(f'Contracting: {metric_data["contracting_norm"]}\n')
+        f.write(f'Constant: {metric_data["constant_norm"]}\n')
+        f.write(f'Stretched: {metric_data["stretched_norm"]}\n\n\n')
+
+
+# ==========================================
+# 3. VISUALIZATION (Pure Plotting)
+# ==========================================
+
+def plot_sarcomere_groups(
+    group_data: dict,
+    ax: Optional[plt.Axes] = None,
+    filename: Optional[Union[str, Path]] = None,
+    merge_groups: bool = True,
+    label: str = ''
+) -> plt.Axes:
+    """Panel 4H: Proportion of sarcomeres in each group as a function of stretch."""
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    if not group_data:
+        print(f"Skipping group plot for '{label}': 0 sarcomeres present.")
+        return ax
+    
+    stretch = group_data["stretch"]
+    ax.plot(stretch, group_data["contracting_prop"], label=f'{label} Contracting')
+    
     if merge_groups:
-        merged_stretch = (sl0_groups['Constant'] + sl0_groups['Stretched']) / 2
-        plt.plot(stretch, merged_stretch, label=f'{label} Stretched')
-        plt.plot(stretch, sl0_groups['Contracting'], label=f'{label} Contracting')
+        merged = group_data["constant_prop"] + group_data["stretched_prop"]
+        ax.plot(stretch, merged, label=f'{label} Stretched')
     else:
-        for key, values in sl0_groups.items():
-            plt.plot(stretch, values, label=f'{label} {key}')
+        ax.plot(stretch, group_data["constant_prop"], label=f'{label} Constant')
+        ax.plot(stretch, group_data["stretched_prop"], label=f'{label} Stretched')
+        
+    ax.legend()
+    yticks = np.linspace(0, 1, 6)
+    ylabels = [f'{l*100:2.0f}' for l in yticks]
+    ax.set_yticks(yticks)
+    ax.set_yticklabels(ylabels)
+    ax.set_ylabel('Proportion of sarcomeres (%)')
+    ax.set_xlabel('Total stretch (%)')
+    
+    if filename:
+        ax.figure.tight_layout()
+        ax.figure.savefig(filename)
 
-    plt.legend()
-    plt.title("Resting sarcomere lengths after stretch")
-    plt.xlabel('Total stretch (%)')
-    plt.ylabel('Sarcomere length (μm)')
-    plt.savefig(filename)
-
-    if summaryfile is not None:
-        with open(summaryfile, 'a') as outfile:
-            outfile.write('Panel 4I, sarcomere lengths\n')
-            outfile.write('Stretch values (x axis):\n')
-            for key, values in sl0_groups.items():
-                outfile.write(f'{key}: {values}\n')
-            outfile.write('\n\n')
+    return ax
 
 
-def plot_active_work(
+def plot_mutant_distribution(
+    mutant_mask: np.ndarray, 
+    ax: Optional[plt.Axes] = None,
+    filename: Optional[Union[str, Path]] = None
+) -> plt.Axes:
+    """Visualizes the 2D sarcomere array grid, color-coding Control vs. Mutant sarcomeres."""
+    if ax is None:
+        fig, ax = plt.subplots()
+    
+    colors = ['#add8e6', '#ff7f0e']
+    cmap = ListedColormap(colors)
+    
+    ax.imshow(mutant_mask, cmap=cmap, aspect='auto', origin='lower')
+    ax.set_title('Spatial Distribution of Mutant Sarcomeres')
+    ax.set_ylabel('Myofibril Index (Parallel)')
+    ax.set_xlabel('Sarcomere Index (Serial)')
+    
+    ctrl_patch = mpatches.Patch(color=colors[0], label='Control (WT)')
+    mut_patch = mpatches.Patch(color=colors[1], label='Mutant')
+    ax.legend(handles=[ctrl_patch, mut_patch], bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    if filename:
+        ax.figure.savefig(filename, bbox_inches='tight')
+        
+    return ax
+
+
+def plot_sarcomere_length(
     stretch: Union[List, np.ndarray],
-    active_work: Union[List, np.ndarray],
-    filename: str,
+    sl_data: dict,
+    ax: Optional[plt.Axes] = None,
+    filename: Optional[Union[str, Path]] = None,
+    merge_groups: bool = True,
+    label: str = ''
+) -> plt.Axes:
+    """Panel 4I: Sarcomere length after stretch, before contraction."""
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    if merge_groups:
+        merged_stretch = (sl_data.get('Constant', 0) + sl_data.get('Stretched', 0)) / 2
+        ax.plot(stretch, merged_stretch, label=f'{label} Stretched')
+        ax.plot(stretch, sl_data.get('Contracting', 0), label=f'{label} Contracting')
+    else:
+        for key, values in sl_data.items():
+            ax.plot(stretch, values, label=f'{label} {key}')
+
+    ax.legend()
+    ax.set_title("Resting sarcomere lengths after stretch")
+    ax.set_xlabel('Total stretch (%)')
+    ax.set_ylabel('Sarcomere length (μm)')
+    
+    if filename:
+        ax.figure.tight_layout()
+        ax.figure.savefig(filename)
+
+    return ax
+
+
+def plot_active_metric(
+    stretch: Union[List, np.ndarray],
+    metric_data: dict,
+    title: str = "Active Metric",
+    ylabel: str = "Normalized Metric",
+    ax: Optional[plt.Axes] = None,
+    filename: Optional[Union[str, Path]] = None,
     grouped: bool = True,
     merge_groups: bool = True,
-    summaryfile: Optional[str] = None,
-    label: Optional[str] = None,
-    baseline: Optional[float] = None
-) -> float:
-    """
-    Panel 4K: Active work as a function of stretch for each group,
-    grouped according to their behavior at zero stretch.
-    """
-    active_work_arr = np.array(active_work)
-    sum_work = np.sum(active_work_arr, 1)
-    
-    if baseline is None:
-        baseline = float(sum_work[0])
+    label: Optional[str] = None
+) -> plt.Axes:
+    """A generic visualization function for active work or active force."""
+    if ax is None:
+        fig, ax = plt.subplots()
 
-    sum_work = sum_work / baseline
-    active_work_arr = active_work_arr / baseline
-    
-    if label is None:
-        label = 'Total'
+    label = label or 'Total'
 
     if grouped:
-        plt.plot(stretch, active_work_arr[:, 0], label=f'{label} Contracting')
+        ax.plot(stretch, metric_data["contracting_norm"], label=f'{label} Contracting')
         if merge_groups:
-            plt.plot(stretch, active_work_arr[:, 1] + active_work_arr[:, 2], label=f'{label} Stretched')
+            merged = metric_data["constant_norm"] + metric_data["stretched_norm"]
+            ax.plot(stretch, merged, label=f'{label} Stretched')
         else:
-            plt.plot(stretch, active_work_arr[:, 1], label=f'{label} Constant')
-            plt.plot(stretch, active_work_arr[:, 2], label=f'{label} Stretched')
+            ax.plot(stretch, metric_data["constant_norm"], label=f'{label} Constant')
+            ax.plot(stretch, metric_data["stretched_norm"], label=f'{label} Stretched')
             
-    plt.plot(stretch, sum_work, label=label)
-    plt.legend()
-    plt.xlabel('Total stretch (%)')
-    plt.ylabel('Normalized active work')
-    plt.title('Total active work')
-    plt.savefig(filename)
-
-    if summaryfile is not None:
-        with open(summaryfile, 'a') as outfile:
-            outfile.write('Panel 4K, total active work\n')
-            outfile.write('Stretch values (x axis):\n')
-            outfile.write(f'{stretch}\n')
-            outfile.write('Normalized work (y axis):\n')
-            outfile.write(f'Total: {sum_work}\n')
-            outfile.write(f'Contracting: {active_work_arr[:, 0]}\n')
-            outfile.write(f'Constant: {active_work_arr[:, 1]}\n')
-            outfile.write(f'Stretched: {active_work_arr[:, 2]}\n\n\n')
-
-    return baseline
-
-
-def plot_active_force(
-    stretch: Union[List, np.ndarray],
-    total_active: Union[List, np.ndarray],
-    filename: str,
-    grouped: bool = True,
-    label: Optional[str] = None,
-    summaryfile: Optional[str] = None,
-    baseline: Optional[float] = None
-) -> float:
-    """
-    Panel 4J: Force as a function of stretch for each group,
-    grouped according to their behavior at zero stretch.
-    """
-    total_active_arr = np.array(total_active)
-    sum_active = np.sum(total_active_arr, 1)
+    ax.plot(stretch, metric_data["total_norm"], label=label)
+    ax.legend()
+    ax.set_xlabel('Total stretch (%)')
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
     
-    if baseline is None:
-        baseline = float(sum_active[0])
-        
-    sum_active = sum_active / baseline
-    total_active_arr = total_active_arr / baseline
-    
-    if label is None:
-        label = 'Total'
-        
-    plt.plot(stretch, sum_active, label=label)
-    
-    if grouped:
-        plt.plot(stretch, total_active_arr[:, 0], label='Contracting')
-        plt.plot(stretch, total_active_arr[:, 1], label='Constant')
-        plt.plot(stretch, total_active_arr[:, 2], label='Stretched')
-        
-    plt.legend()
-    plt.title("Total active force")
-    plt.ylabel('Normalized active force')
-    plt.xlabel('Total stretch (%)')
-    plt.savefig(filename)
+    if filename:
+        ax.figure.tight_layout()
+        ax.figure.savefig(filename)
 
-    if summaryfile is not None:
-        with open(summaryfile, 'a') as outfile:
-            outfile.write('Panel 4J, total active force\n')
-            outfile.write('Stretch values (x axis):\n')
-            outfile.write(f'{stretch}\n')
-            outfile.write('Normalized force (y axis):\n')
-            outfile.write(f'Total: {sum_active}\n')
-            outfile.write(f'Contracting: {total_active_arr[:, 0]}\n')
-            outfile.write(f'Constant: {total_active_arr[:, 1]}\n')
-            outfile.write(f'Stretched: {total_active_arr[:, 2]}\n\n\n')
-
-    return baseline
+    return ax

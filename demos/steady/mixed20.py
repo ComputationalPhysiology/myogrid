@@ -7,17 +7,17 @@ overlap function to simulate reduced thick filament length.
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
+from typing import Dict, List, Any
 
 from myogrid.overlap import Overlap 
 from myogrid.steady import SteadySarcArray2D
 from myogrid.steady.plot_functions import (
+    process_sarcomere_groups,
+    process_active_metric,
     plot_sarcomere_groups, 
-    plot_active_work, 
-    plot_active_force,
+    plot_active_metric, 
     plot_mutant_distribution  
 )
-
-from typing import Dict, List, Any
 
 ResultDict = Dict[str, List[Any]]
 
@@ -62,12 +62,10 @@ def run_simulation_sweep(
 
         strain = sarc_array.sarc_strain(SL0)
     
-        # Save group numbers for plotting
         results["n_sarc_group_tot"].append([strain, contr_tot, const_tot, stretch_tot])
         results["n_sarc_group_ctrl"].append([strain, contr_ctrl, const_ctrl, stretch_ctrl])
         results["n_sarc_group_mut"].append([strain, contr_mut, const_mut, stretch_mut])
         
-        # Save forces and work
         results["strains"].append(strain)
         results["active"].append(sarc_array.active_force_grouped(activation=activation))
         results["work"].append(sarc_array.active_work_grouped(activation=activation))
@@ -76,11 +74,9 @@ def run_simulation_sweep(
 
 
 def main() -> None:
-    # Use pathlib for clean directory management
     figure_dir = Path("mixed_sim_panels")
     figure_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- 1. Define Parameters ---
     params_wt = {"k_se": 1.0, "PCon_t": 0.002, "k_im": 1.0, "T_ref": 15.0}
     overlap_wt = Overlap(SL_zero=1.6, SL_low=1.7)
     
@@ -91,13 +87,13 @@ def main() -> None:
     n_myofibrils = 30
     n_serial_sarcs = 50
 
-    # --- 2. Generate the 20% Mutant Mask ---
+    # Generate the mask for 20% "mutant" sarcomeres
     np.random.seed(42)  
     mutant_mask = np.random.rand(n_myofibrils, n_serial_sarcs) < 0.20
     
     plot_mutant_distribution(
-        mutant_mask, 
-        filename=str(figure_dir / "array_distribution.pdf")
+        mutant_mask=mutant_mask, 
+        filename=figure_dir / "array_distribution.pdf"
     )
 
     actual_pct = np.mean(mutant_mask) * 100
@@ -105,9 +101,6 @@ def main() -> None:
     print(f"Grid size: {n_myofibrils} x {n_serial_sarcs} ({n_myofibrils * n_serial_sarcs} total sarcomeres)")
     print(f"Generated mutant mask with {actual_pct:.1f}% mutant sarcomeres.\n")
 
-    # --- 3. Run Simulation ---
-    # We pass the standard WT parameters to the whole array, but provide the 
-    # mutant_mask and mutant_scale so SteadySarcArray2D handles the local scaling internally.
     mixed_array = SteadySarcArray2D(
         overlap=overlap_wt, 
         params=params_wt, 
@@ -122,42 +115,55 @@ def main() -> None:
 
     results = run_simulation_sweep(mixed_array, preloads, activation, mutant_mask)
 
-    # --- 4. Generate Plots ---
     print("\n========== Generating Plots ==========")
+    strains = np.array(results["strains"])
     
-    # Plot Total Force
-    plt.clf()
-    force_file = str(figure_dir / "mixed_force.pdf")
-    plot_active_force(
-        results["strains"], results["active"], force_file,
-        label="Mixed Array", grouped=True
+    force_data = process_active_metric(results["active"])
+    plot_active_metric(
+        stretch=strains, 
+        metric_data=force_data, 
+        title="Total Active Force", 
+        ylabel="Normalized Active Force",
+        filename=figure_dir / "mixed_force.pdf",
+        label="Mixed Array", 
+        grouped=True
     )
     
-    # Plot Total Work
-    plt.clf()
-    work_file = str(figure_dir / "mixed_work.pdf")
-    plot_active_work(
-        results["strains"], results["work"], work_file,
-        label="Mixed Array", grouped=True
+    work_data = process_active_metric(results["work"])
+    plot_active_metric(
+        stretch=strains, 
+        metric_data=work_data, 
+        title="Total Active Work", 
+        ylabel="Normalized Active Work",
+        filename=figure_dir / "mixed_work.pdf",
+        label="Mixed Array", 
+        grouped=True
     )
 
-    # Plot Sub-population Proportions
-    plt.clf()
+    #Plot the number of stretched, constant and contracting for the 
+    # control sarcomeres, the 'mutant', and the total
+    groups_tot = process_sarcomere_groups(results["n_sarc_group_tot"])
     plot_sarcomere_groups(
-        results["n_sarc_group_tot"], str(figure_dir / "groups_total.pdf"),
-        label="Total Array", merge_groups=True
+        group_data=groups_tot, 
+        filename=figure_dir / "groups_total.pdf",
+        label="Total Array", 
+        merge_groups=True
     )
     
-    plt.clf()
+    groups_ctrl = process_sarcomere_groups(results["n_sarc_group_ctrl"])
     plot_sarcomere_groups(
-        results["n_sarc_group_ctrl"], str(figure_dir / "groups_control.pdf"),
-        label="Control", merge_groups=True
+        group_data=groups_ctrl, 
+        filename=figure_dir / "groups_control.pdf",
+        label="Control", 
+        merge_groups=True
     )
     
-    plt.clf()
+    groups_mut = process_sarcomere_groups(results["n_sarc_group_mut"])
     plot_sarcomere_groups(
-        results["n_sarc_group_mut"], str(figure_dir / "groups_mutant.pdf"),
-        label="Mutant", merge_groups=True
+        group_data=groups_mut, 
+        filename=figure_dir / "groups_mutant.pdf",
+        label="Mutant", 
+        merge_groups=True
     )
     
     print(f"Simulation complete. Plots saved to '{figure_dir}/'.")

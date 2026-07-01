@@ -40,10 +40,21 @@ array_model = SarcArray2D(
 sample_sl = np.full((N_FIBRILS, N_SERIES), 1.85)
 sample_sl[1, 1:4] = [1.8, 1.8, 1.95]
 highlight_sarcs = [(1, 1), (1, 2), (1, 3)]
-    
+
+sarc_labels = {
+        (1, 1): "Short",
+        (1, 2): "Short",
+        (1, 3): "Long",
+        "default": "Normal"
+    }
 # plot the sarc array and save the color map for later:
-colors = plot_sarc_array('sarcomere_visual.pdf', sample_sl, plot_sarcs=highlight_sarcs)
-    
+ax_grid, colors = plot_sarc_array(
+    data=sample_sl, # or SLarr
+    plot_sarcs=highlight_sarcs, 
+    filename='sarcomere_visual.pdf',
+    sarc_labels=sarc_labels 
+)
+
 init = array_model.init_state_values({
     (1, 1): {'SL': 1.8}, 
     (1, 2): {'SL': 1.8}, 

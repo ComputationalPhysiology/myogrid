@@ -9,14 +9,19 @@ contraction in ttnda mutant cells:
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, List, Tuple, Any, Union
 
 from myogrid.overlap import Overlap, OverlapRice
 from myogrid.steady import SteadySarcArray2D
+
+# Import the Pipeline architecture
 from myogrid.steady.plot_functions import (
-    plot_sarcomere_groups, 
-    plot_active_work, 
-    plot_active_force
+    process_sarcomere_groups,
+    process_active_metric,
+    export_group_summary,
+    export_metric_summary,
+    plot_sarcomere_groups,
+    plot_active_metric,
 )
 
 # Type alias for cleaner type hinting
@@ -40,37 +45,31 @@ def create_sarc_array(
     )
 
 
-def plot_overlap_comparison(overlap_wt: Overlap, overlap_ttn: Overlap, filename: str) -> None:
+def plot_overlap_comparison(overlap_wt: Overlap, overlap_ttn: Overlap, filename: Union[str, Path]) -> None:
     """Generates and saves the filament overlap (force-length relation) plot."""
     sl = np.linspace(1.6, 2.4, 100)
-    plt.clf()
-    plt.plot(sl, overlap_wt(sl), label="WT")
-    plt.plot(sl, overlap_ttn(sl), label="TTN")
-    plt.title("Filament overlap (force-length relation)")
-    plt.xlabel("Sarcomere length (μm)")
-    plt.ylabel("Overlap")
+    fig, ax = plt.subplots()
+    ax.plot(sl, overlap_wt(sl), label="WT")
+    ax.plot(sl, overlap_ttn(sl), label="TTN")
+    ax.set_title("Filament overlap (force-length relation)")
+    ax.set_xlabel("Sarcomere length (μm)")
+    ax.set_ylabel("Overlap")
     
-    xmin, xmax, ymin, ymax = plt.axis()
-    plt.axis([xmin, xmax, 0, ymax])
-    plt.legend()
-    plt.savefig(filename)
+    xmin, xmax, ymin, ymax = ax.axis()
+    ax.axis([xmin, xmax, 0, ymax])
+    ax.legend()
+    fig.savefig(filename)
+    plt.close(fig)
 
 
 def run_simulation_sweep(
     sarc_array: SteadySarcArray2D, 
     preloads: List[float], 
-    activation: float,
-    mutant_mask: Optional[np.ndarray] = None
+    activation: float
 ) -> ResultDict:
-    """Runs the force balance simulation across a sweep of preloads and collects the metrics."""
+    """Runs the force balance simulation across a sweep of preloads for a homogeneous array."""
     
-    if mutant_mask is None:
-        mutant_mask = np.zeros(sarc_array.SLset.shape, dtype=bool)
-        
-    ctrl_mask = ~mutant_mask
-
-    # Added n_sarc_group_tot so you can plot the whole array if needed
-    result_keys = ["stretched_sls", "tot_force", "strains", "n_sarc_group_tot", "n_sarc_group_ctrl", "n_sarc_group_mut", "active", "work"]
+    result_keys = ["stretched_sls", "tot_force", "strains", "n_sarc_group_tot", "active", "work"]
     results: ResultDict = {key: [] for key in result_keys}
 
     for p in preloads:
@@ -78,25 +77,13 @@ def run_simulation_sweep(
             activation=activation, preload=p
         )
         
-        # --- 1. Total Array Reporting ---
-        # Note: If these do not sum to 1500, you need to change < to <= for the constant group in steadystate_array.py
+        # --- Total Array Reporting ---
         contr_tot = int(np.sum(contr))
         const_tot = int(np.sum(constant))
         stretch_tot = int(np.sum(stretch))
 
-        # --- 2. Separate Reporting by Type ---
-        contr_ctrl = int(np.sum(contr & ctrl_mask))
-        const_ctrl = int(np.sum(constant & ctrl_mask))
-        stretch_ctrl = int(np.sum(stretch & ctrl_mask))
-        
-        contr_mut = int(np.sum(contr & mutant_mask))
-        const_mut = int(np.sum(constant & mutant_mask))
-        stretch_mut = int(np.sum(stretch & mutant_mask))
-        
         print(f"\n--- Preload {p} ---")
-        print(f"Entire Array       -> Contracting: {contr_tot}, Constant: {const_tot}, Stretched: {stretch_tot} (Total: {contr_tot + const_tot + stretch_tot})")
-        print(f"Control Sarcomeres -> Contracting: {contr_ctrl}, Constant: {const_ctrl}, Stretched: {stretch_ctrl}")
-        print(f"Mutant Sarcomeres  -> Contracting: {contr_mut}, Constant: {const_mut}, Stretched: {stretch_mut}")
+        print(f"Entire Array -> Contracting: {contr_tot}, Constant: {const_tot}, Stretched: {stretch_tot} (Total: {contr_tot + const_tot + stretch_tot})")
 
         # Metrics collection
         sl0_vals = {
@@ -111,10 +98,8 @@ def run_simulation_sweep(
         results["stretched_sls"].append(sl0_vals)
         results["tot_force"].append(sarc_array.total_force(SL, SL0))
         
-        # Save groups separately for downstream plotting
+        # Save total groups for downstream processing
         results["n_sarc_group_tot"].append([strain, contr_tot, const_tot, stretch_tot])
-        results["n_sarc_group_ctrl"].append([strain, contr_ctrl, const_ctrl, stretch_ctrl])
-        results["n_sarc_group_mut"].append([strain, contr_mut, const_mut, stretch_mut])
         
         results["strains"].append(strain)
         results["active"].append(sarc_array.active_force_grouped(activation=activation))
@@ -124,7 +109,7 @@ def run_simulation_sweep(
 
 
 def main() -> None:
-    figure_dir = Path("titin_variation_figs")
+    figure_dir = Path("titin_var_results")
     figure_dir.mkdir(parents=True, exist_ok=True)
 
     # Active default parameters:
@@ -135,26 +120,19 @@ def main() -> None:
     overlap_wt = Overlap(SL_zero=1.6, SL_low=1.7)
     overlap_ttn = Overlap(SL_zero=1.6, SL_low=1.7, scale=0.7857)
 
-    plot_overlap_comparison(overlap_wt, overlap_ttn, filename=str(figure_dir / "overlap_ttn.png"))
+    plot_overlap_comparison(overlap_wt, overlap_ttn, filename=figure_dir / "overlap_ttn.png")
 
     wt_mean, wt_sd = 1.952, 0.15
     ttn_mean, ttn_sd = 1.952, 0.15
 
     preloads = [0, 2.5, 5, 7.5, 10, 11, 12.5, 15]
     activation = 1.0
-    
-    # Define grid dimensions (matching your create_sarc_array arguments)
-    n_myofibrils, n_serial_sarcs = 30, 50
-
-    # Example: Create an empty mask (all False = Control)
-    all_control_mask = np.zeros((n_myofibrils, n_serial_sarcs), dtype=bool)
-    all_mutant_mask = np.ones((n_myofibrils, n_serial_sarcs), dtype=bool)
 
     # --- Setup and Run Simulations ---
 
     print("\n========== Running Control Simulation (WT) ==========")
     wt_array = create_sarc_array(params_wt, overlap_wt, (wt_mean, wt_sd))
-    control_results = run_simulation_sweep(wt_array, preloads, activation, mutant_mask=all_control_mask)
+    control_results = run_simulation_sweep(wt_array, preloads, activation)
 
     mutations = {
         "short_filament": create_sarc_array(params_wt, overlap_ttn, (wt_mean, wt_sd)),
@@ -167,68 +145,104 @@ def main() -> None:
     ttn_results: Dict[str, ResultDict] = {}
     for name, mut_array in mutations.items():
         print(f"\n========== Running Mutant Simulation: {name} ==========")
-        ttn_results[name] = run_simulation_sweep(mut_array, preloads, activation, mutant_mask=all_control_mask)
+        ttn_results[name] = run_simulation_sweep(mut_array, preloads, activation)
 
-    # --- Generate Plots ---
+    # --- Process, Export, and Visualize Data ---
 
     for key in ttn_results:
-        # Force plots
-        summaryfile = str(figure_dir / f"force_{key}.txt")
-        filename = str(figure_dir / f"force_{key}.pdf")
+        summaryfile = figure_dir / f"force_{key}.txt"
+        filename = figure_dir / f"force_{key}.pdf"
         
-        plt.clf()
-        norm = plot_active_force(
-            control_results["strains"], control_results["active"], filename,
-            label="Control", grouped=False, summaryfile=summaryfile
+        # 1. PROCESS Force Data (Normalize against Control baseline)
+        force_data_ctrl = process_active_metric(control_results["active"])
+        baseline = force_data_ctrl["baseline"]
+        force_data_mut = process_active_metric(ttn_results[key]["active"], baseline=baseline)
+
+        # 2. EXPORT Force Data
+        export_metric_summary(summaryfile, "Control", control_results["strains"], force_data_ctrl)
+        export_metric_summary(summaryfile, key, ttn_results[key]["strains"], force_data_mut)
+
+        # 3. VISUALIZE Force Data (Overlaying Control and Mutant on same Axes)
+        ax = plot_active_metric(
+            stretch=control_results["strains"], 
+            metric_data=force_data_ctrl, 
+            title="Total active force", ylabel="Normalized active force", 
+            label="Control", grouped=False
         )
-        plot_active_force(
-            ttn_results[key]["strains"], ttn_results[key]["active"], filename,
-            label=key, grouped=False, baseline=norm, summaryfile=summaryfile
+        plot_active_metric(
+            stretch=ttn_results[key]["strains"], 
+            metric_data=force_data_mut, 
+            ax=ax, filename=filename,  # Reuse ax and trigger save
+            title="Total active force", ylabel="Normalized active force",
+            label=key, grouped=False
         )
 
-        # Groups plots (using the separated control array from our new dictionary keys)
-        summaryfile_ctrl = str(figure_dir / f"groups_{key}_ctrl.txt")
-        filename_ctrl = str(figure_dir / f"groups_{key}_ctrl.pdf")
+        # ---------------------------------------------
+        # Groups plots
+        summaryfile_grp = figure_dir / f"groups_{key}.txt"
+        filename_grp = figure_dir / f"groups_{key}.pdf"
         
-        plt.clf()
-        plot_sarcomere_groups(
-            control_results["n_sarc_group_ctrl"], filename_ctrl,
-            label="Control (WT Sarcomeres)", merge_groups=True, summaryfile=summaryfile_ctrl
+        # 1. PROCESS Groups Data (Now purely using the total array data)
+        groups_data_ctrl = process_sarcomere_groups(control_results["n_sarc_group_tot"])
+        groups_data_mut = process_sarcomere_groups(ttn_results[key]["n_sarc_group_tot"])
+
+        # 2. EXPORT Groups Data
+        export_group_summary(summaryfile_grp, "Control Array", groups_data_ctrl)
+        export_group_summary(summaryfile_grp, f"{key} Array", groups_data_mut)
+
+        # 3. VISUALIZE Groups Data
+        ax_grp = plot_sarcomere_groups(
+            group_data=groups_data_ctrl,
+            label="Control", merge_groups=True
         )
         plot_sarcomere_groups(
-            ttn_results[key]["n_sarc_group_ctrl"], filename_ctrl,
-            label=f"{key} (WT Sarcomeres)", merge_groups=True, summaryfile=summaryfile_ctrl
+            group_data=groups_data_mut,
+            ax=ax_grp, filename=filename_grp, 
+            label=key, merge_groups=True
         )
 
-    # --- Specific Plot: Combined No Passive ---
+    # --- Specific Plot: Combined No Passive Work ---
     
     key = "combined_no_passive"
-    print(f"\nActive work {key}")
-    print("Control:", control_results["work"])
-    print("Mutant:", ttn_results[key]["work"])
+    summaryfile_work = figure_dir / "titin_var_work.txt"
+    
+    # 1. PROCESS Work Data
+    work_data_ctrl = process_active_metric(control_results["work"])
+    baseline_work = work_data_ctrl["baseline"]
+    work_data_mut = process_active_metric(ttn_results[key]["work"], baseline=baseline_work)
 
-    # Total Work Plot
-    plt.clf()
-    filename = str(figure_dir / "work_combined_total.pdf")
-    norm = plot_active_work(
-        control_results["strains"], control_results["work"], filename,
-        label="Control", grouped=False, summaryfile=str(figure_dir / "figure8.txt")
+    # 2. EXPORT Work Data
+    export_metric_summary(summaryfile_work, "Control Work", control_results["strains"], work_data_ctrl)
+    export_metric_summary(summaryfile_work, f"{key} Work", ttn_results[key]["strains"], work_data_mut)
+
+    # 3. VISUALIZE Total Work Plot
+    ax_wt = plot_active_metric(
+        stretch=control_results["strains"], 
+        metric_data=work_data_ctrl, 
+        title="Total active work", ylabel="Normalized active work", 
+        label="Control", grouped=False
     )
-    plot_active_work(
-        ttn_results[key]["strains"], ttn_results[key]["work"], filename,
-        label=key, grouped=False, baseline=norm, summaryfile=str(figure_dir / "figure8.txt")
+    plot_active_metric(
+        stretch=ttn_results[key]["strains"], 
+        metric_data=work_data_mut, 
+        ax=ax_wt, filename=figure_dir / "work_combined_total.pdf", 
+        title="Total active work", ylabel="Normalized active work",
+        label=key, grouped=False
     )
 
-    # Grouped Work Plot
-    plt.clf()
-    filename = str(figure_dir / "work_combined_grouped.pdf")
-    norm = plot_active_work(
-        control_results["strains"], control_results["work"], filename,
-        label="Control", grouped=True, summaryfile=str(figure_dir / "figure8.txt")
+    # 4. VISUALIZE Grouped Work Plot
+    ax_wg = plot_active_metric(
+        stretch=control_results["strains"], 
+        metric_data=work_data_ctrl, 
+        title="Total active work", ylabel="Normalized active work", 
+        label="Control", grouped=True
     )
-    plot_active_work(
-        ttn_results[key]["strains"], ttn_results[key]["work"], filename,
-        label=key, grouped=True, baseline=norm, summaryfile=str(figure_dir / "figure8.txt")
+    plot_active_metric(
+        stretch=ttn_results[key]["strains"], 
+        metric_data=work_data_mut, 
+        ax=ax_wg, filename=figure_dir / "work_combined_grouped.pdf", 
+        title="Total active work", ylabel="Normalized active work",
+        label=key, grouped=True
     )
 
 if __name__ == "__main__":

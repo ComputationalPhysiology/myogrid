@@ -37,7 +37,9 @@ def process_sarcomere_length(stretched_sls: List[Dict[str, Union[float, np.ndarr
 
 def process_active_metric(data: Union[List, np.ndarray], baseline: Optional[float] = None) -> Dict[str, Any]:
     """Processes force or work data (calculates sum and normalizes)."""
+    
     arr = np.array(data)
+        
     sum_val = np.sum(arr, axis=1)
     
     if baseline is None:
